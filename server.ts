@@ -445,7 +445,7 @@ app.get('/api/predict', authenticateToken, async (req: any, res: any) => {
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-lite-preview-02-05",
+      model: "gemini-2.0-flash",
       contents: prompt,
     });
     
@@ -478,7 +478,7 @@ app.post('/api/predict', authenticateToken, async (req: any, res: any) => {
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-lite-preview-02-05",
+      model: "gemini-2.0-flash",
       contents: prompt,
     });
     

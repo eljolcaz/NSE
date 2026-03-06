@@ -31,60 +31,63 @@ const InventoryItem = ({ item, onEdit }: { item: Product; onEdit: (item: Product
   const isLowStock = item.stock <= item.stock_minimo;
   
   return (
-    <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors group border-b border-slate-100 dark:border-slate-800/60 last:border-0">
-      <td className="px-6 py-4">
-        <div className="flex items-center gap-3">
-          <div className={cn("size-10 rounded-lg flex items-center justify-center shrink-0", 
-            isLowStock ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400" : 
-            "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+    <tr className="group border-b border-slate-100 dark:border-slate-800/60 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all duration-200">
+      <td className="px-6 py-5 min-w-[200px]">
+        <div className="flex items-center gap-4">
+          <div className={cn("size-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm transition-colors", 
+            isLowStock ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400" : 
+            "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400"
           )}>
-            <span className="material-symbols-outlined text-xl">inventory_2</span>
+            <span className="material-symbols-outlined text-2xl">inventory_2</span>
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-900 dark:text-white">{item.name}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">ID: {item.id}</p>
+            <p className="text-base font-bold text-slate-900 dark:text-white">{item.name}</p>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">ID: {item.id}</p>
           </div>
         </div>
       </td>
-      <td className="px-6 py-4 text-center">
-        <span className="inline-block px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-sm font-medium text-slate-700 dark:text-slate-300">
+      <td className="px-6 py-5 text-center">
+        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
           {item.unidad_medida}
         </span>
       </td>
-      <td className="px-6 py-4">
-        <div className="flex flex-col gap-1.5 w-full">
-          <div className="flex justify-between text-xs">
-            <span className={cn("font-medium", isLowStock ? "text-red-600 dark:text-red-400" : "text-slate-700 dark:text-slate-300")}>
-              {item.stock} {item.unidad_medida}
+      <td className="px-6 py-5 min-w-[180px]">
+        <div className="flex flex-col gap-2 w-full max-w-xs">
+          <div className="flex justify-between items-end text-xs gap-2">
+            <span className={cn("font-bold text-sm truncate", isLowStock ? "text-red-600 dark:text-red-400" : "text-slate-700 dark:text-slate-300")}>
+              {item.stock}
             </span>
-            <span className="text-slate-500">Mín: {item.stock_minimo}</span>
+            <span className="text-slate-500 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded whitespace-nowrap">Mín: {item.stock_minimo}</span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+          <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50">
             <div 
-              className={cn("h-full rounded-full transition-all duration-500", isLowStock ? "bg-red-500" : "bg-emerald-500")} 
+              className={cn("h-full rounded-full transition-all duration-500 shadow-sm", isLowStock ? "bg-red-500" : "bg-emerald-500")} 
               style={{ width: `${percentage}%` }}
             ></div>
           </div>
         </div>
       </td>
-      <td className="px-6 py-4 bg-emerald-500/5 dark:bg-emerald-500/5 group-hover:bg-emerald-500/10 transition-colors">
-        <div className="flex items-center justify-between gap-3">
+      <td className="px-6 py-5 bg-slate-50/50 dark:bg-slate-800/20 group-hover:bg-slate-100/50 dark:group-hover:bg-slate-800/40 transition-colors whitespace-nowrap">
+        <div className="flex items-center justify-between gap-4">
           {isLowStock ? (
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-red-600 dark:text-red-400">Reponer Stock</span>
+            <div className="flex items-center gap-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/10 px-3 py-1.5 rounded-lg border border-red-100 dark:border-red-900/20">
+              <AlertCircle className="w-4 h-4" />
+              <span className="text-sm font-bold">Reponer Stock</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/10 px-3 py-1.5 rounded-lg border border-emerald-100 dark:border-emerald-900/20">
               <CheckCircle className="w-4 h-4" />
-              <span className="text-sm font-medium">Stock Óptimo</span>
+              <span className="text-sm font-bold">Stock Óptimo</span>
             </div>
           )}
           
-          <div className="flex gap-2">
-             <button onClick={() => onEdit(item)} className="text-slate-600 hover:text-emerald-600 bg-white dark:bg-slate-800 p-1.5 rounded-md shadow-sm border border-slate-200 dark:border-slate-700 transition-colors">
-              <Edit className="w-4 h-4" />
-            </button>
-          </div>
+          <button 
+            onClick={() => onEdit(item)} 
+            className="text-slate-400 hover:text-emerald-600 hover:bg-white dark:hover:bg-slate-700 p-2 rounded-lg transition-all shadow-sm hover:shadow border border-transparent hover:border-slate-200 dark:hover:border-slate-600"
+            title="Editar producto"
+          >
+            <Edit className="w-4 h-4" />
+          </button>
         </div>
       </td>
     </tr>
@@ -176,12 +179,12 @@ export default function Inventory() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nombre del Artículo</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Unidad</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-1/4">Stock vs Mínimo</th>
-                <th className="px-6 py-4 text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider bg-emerald-500/5 dark:bg-emerald-500/10">
-                  <div className="flex items-center gap-1">
+              <tr className="bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 backdrop-blur-sm">
+                <th className="px-6 py-5 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nombre del Artículo</th>
+                <th className="px-6 py-5 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Unidad</th>
+                <th className="px-6 py-5 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-1/3">Stock vs Mínimo</th>
+                <th className="px-6 py-5 text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider bg-emerald-50/30 dark:bg-emerald-500/5">
+                  <div className="flex items-center gap-2">
                     <BrainCircuit className="w-4 h-4" />
                     Estado
                   </div>

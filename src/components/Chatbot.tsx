@@ -20,7 +20,30 @@ export default function Chatbot() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // Store chat session in ref to persist across renders
   const chatSessionRef = useRef<any>(null);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, token } = useAuth();
+
+  const fetchContextData = async () => {
+    if (!token) return null;
+    const headers = { 'Authorization': `Bearer ${token}` };
+    try {
+      // Fetch data based on user role or general data
+      // We'll try to fetch as much as possible that the user has access to
+      const [productsRes, ordersRes, suppliersRes] = await Promise.all([
+        fetch('/api/products', { headers }).catch(() => ({ json: () => [] })),
+        fetch('/api/orders', { headers }).catch(() => ({ json: () => [] })),
+        fetch('/api/suppliers', { headers }).catch(() => ({ json: () => [] }))
+      ]);
+      
+      const products = await productsRes.json();
+      const orders = await ordersRes.json();
+      const suppliers = await suppliersRes.json();
+      
+      return { products, orders, suppliers };
+    } catch (error) {
+      console.error("Error fetching context data:", error);
+      return null;
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -33,15 +56,44 @@ export default function Chatbot() {
   // Initialize chat session once
   useEffect(() => {
     const initChat = async () => {
-      if (!chatSessionRef.current) {
+      // Always re-initialize if not present or to refresh context on mount/auth change
+      // But to avoid too many re-inits, we can check if it's already done or just do it once per auth session
+      // For now, let's do it if chatSessionRef is null
+      if (!chatSessionRef.current && isAuthenticated) {
         try {
           const { GoogleGenAI } = await import("@google/genai");
           const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
           
+          const contextData = await fetchContextData();
+          let contextString = "";
+          
+          if (contextData) {
+             // Limit data to avoid token limits if necessary, but flash models handle large context well
+             const productsStr = JSON.stringify(contextData.products);
+             // Take last 20 orders
+             const ordersStr = JSON.stringify(Array.isArray(contextData.orders) ? contextData.orders.slice(0, 20) : []);
+             const suppliersStr = JSON.stringify(contextData.suppliers);
+             
+             contextString = `
+               DATOS DEL SISTEMA (Contexto Actual):
+               - Productos (Inventario): ${productsStr}
+               - Pedidos Recientes: ${ordersStr}
+               - Proveedores: ${suppliersStr}
+             `;
+          }
+
           chatSessionRef.current = ai.chats.create({
-            model: "gemini-2.0-flash-lite-preview-02-05",
+            model: "gemini-2.0-flash",
             config: {
-              systemInstruction: "Eres un asistente experto en gestión de inventarios para restaurantes llamado GastroLogix AI. Ayudas a los usuarios a entender sus datos, sugerir pedidos y optimizar su cadena de suministro. Tus respuestas deben ser concisas, profesionales y útiles. El usuario es un dueño de restaurante o encargado de bodega."
+              systemInstruction: `Eres un asistente experto en gestión de inventarios para restaurantes llamado GastroLogix AI. 
+              Ayudas a los usuarios a entender sus datos, sugerir pedidos y optimizar su cadena de suministro. 
+              Tus respuestas deben ser concisas, profesionales y útiles. 
+              El usuario es un dueño de restaurante o encargado de bodega.
+              
+              ${contextString}
+              
+              Usa esta información para responder preguntas específicas sobre el estado del inventario, pedidos pendientes, proveedores, etc.
+              Si te preguntan por algo que no está en los datos, indícalo amablemente.`
             }
           });
         } catch (error) {
@@ -53,7 +105,7 @@ export default function Chatbot() {
     if (isAuthenticated) {
       initChat();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, token]); // Add token to dependency to re-fetch if token changes (login)
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -68,10 +120,35 @@ export default function Chatbot() {
         // Re-try initialization if it failed or hasn't happened yet
         const { GoogleGenAI } = await import("@google/genai");
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+        
+        const contextData = await fetchContextData();
+        let contextString = "";
+        
+        if (contextData) {
+           const productsStr = JSON.stringify(contextData.products);
+           const ordersStr = JSON.stringify(Array.isArray(contextData.orders) ? contextData.orders.slice(0, 20) : []);
+           const suppliersStr = JSON.stringify(contextData.suppliers);
+           
+           contextString = `
+             DATOS DEL SISTEMA (Contexto Actual):
+             - Productos (Inventario): ${productsStr}
+             - Pedidos Recientes: ${ordersStr}
+             - Proveedores: ${suppliersStr}
+           `;
+        }
+
         chatSessionRef.current = ai.chats.create({
-          model: "gemini-2.0-flash-lite-preview-02-05",
+          model: "gemini-2.0-flash",
           config: {
-            systemInstruction: "Eres un asistente experto en gestión de inventarios para restaurantes llamado GastroLogix AI. Ayudas a los usuarios a entender sus datos, sugerir pedidos y optimizar su cadena de suministro. Tus respuestas deben ser concisas, profesionales y útiles. El usuario es un dueño de restaurante o encargado de bodega."
+            systemInstruction: `Eres un asistente experto en gestión de inventarios para restaurantes llamado GastroLogix AI. 
+            Ayudas a los usuarios a entender sus datos, sugerir pedidos y optimizar su cadena de suministro. 
+            Tus respuestas deben ser concisas, profesionales y útiles. 
+            El usuario es un dueño de restaurante o encargado de bodega.
+            
+            ${contextString}
+            
+            Usa esta información para responder preguntas específicas sobre el estado del inventario, pedidos pendientes, proveedores, etc.
+            Si te preguntan por algo que no está en los datos, indícalo amablemente.`
           }
         });
       }
@@ -82,9 +159,15 @@ export default function Chatbot() {
       const response = result.text;
 
       setMessages(prev => [...prev, { role: 'model', text: response }]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error calling Gemini:", error);
-      setMessages(prev => [...prev, { role: 'model', text: "Lo siento, tuve un problema al procesar tu solicitud. Por favor intenta de nuevo." }]);
+      let errorMessage = "Lo siento, tuve un problema al procesar tu solicitud.";
+      if (error.message?.includes('API key')) {
+        errorMessage += " Parece haber un problema con la clave API.";
+      } else if (error.message?.includes('model')) {
+        errorMessage += " El modelo de IA no está disponible en este momento.";
+      }
+      setMessages(prev => [...prev, { role: 'model', text: errorMessage }]);
     } finally {
       setIsLoading(false);
     }
