@@ -124,6 +124,28 @@ const NotificationsDropdown = ({ isOpen, onClose }: { isOpen: boolean; onClose: 
   );
 };
 
+const BottomNav = ({ navItems }: { navItems: any[] }) => (
+  <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-[#111827] border-t border-slate-200 dark:border-slate-800 flex justify-around items-center h-16 z-50 px-2 pb-safe">
+    {navItems.slice(0, 5).map((item) => (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        className={({ isActive }) =>
+          cn(
+            "flex flex-col items-center justify-center w-full h-full gap-1 transition-colors",
+            isActive 
+              ? "text-emerald-600 dark:text-emerald-400" 
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+          )
+        }
+      >
+        <item.icon className="w-5 h-5" />
+        <span className="text-[10px] font-medium truncate max-w-[60px]">{item.label}</span>
+      </NavLink>
+    ))}
+  </div>
+);
+
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -183,9 +205,9 @@ export default function Layout() {
     { to: "/", icon: LayoutDashboard, label: "Dashboard", roles: ['admin', 'bodega', 'proveedor'] },
     { to: "/inventory", icon: Package, label: "Inventario", roles: ['admin', 'bodega'] },
     { to: "/orders", icon: ShoppingCart, label: "Pedidos", roles: ['admin', 'bodega', 'proveedor'] },
-    { to: "/warehouse", icon: Warehouse, label: "Movimientos Bodega", roles: ['admin', 'bodega'] },
+    { to: "/warehouse", icon: Warehouse, label: "Bodega", roles: ['admin', 'bodega'] },
     { to: "/suppliers", icon: Truck, label: "Proveedores", roles: ['admin'] },
-    { to: "/predictions", icon: BrainCircuit, label: "Predicciones IA", roles: ['admin'] },
+    { to: "/predictions", icon: BrainCircuit, label: "IA", roles: ['admin'] },
     { to: "/reports", icon: FileText, label: "Reportes", roles: ['admin'] },
   ];
 
@@ -284,6 +306,9 @@ export default function Layout() {
             <h1 className="text-lg font-bold text-slate-900 dark:text-white hidden sm:block">
               {getPageTitle()}
             </h1>
+            <h1 className="text-lg font-bold text-slate-900 dark:text-white sm:hidden">
+              GastroLogix
+            </h1>
           </div>
 
           <div className="flex items-center gap-4">
@@ -322,11 +347,14 @@ export default function Layout() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth pb-20 md:pb-8">
           <div className="max-w-7xl mx-auto">
             <Outlet />
           </div>
         </main>
+
+        {/* Bottom Navigation for Mobile */}
+        <BottomNav navItems={filteredNavItems} />
       </div>
     </div>
   );
