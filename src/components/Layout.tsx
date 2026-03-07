@@ -230,12 +230,11 @@ export default function Layout() {
         )}
       </AnimatePresence>
 
-      {/* Sidebar */}
+      {/* Sidebar - Hidden on mobile, visible on desktop */}
       <motion.aside 
         className={cn(
-          "fixed md:relative z-50 h-full bg-white dark:bg-[#111827] border-r border-slate-200 dark:border-slate-800 flex flex-col transition-all duration-300 ease-in-out",
-          collapsed ? "w-20" : "w-64",
-          mobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+          "hidden md:flex fixed md:relative z-50 h-full bg-white dark:bg-[#111827] border-r border-slate-200 dark:border-slate-800 flex-col transition-all duration-300 ease-in-out",
+          collapsed ? "w-20" : "w-64"
         )}
       >
         <div className="h-16 flex items-center px-4 border-b border-slate-200 dark:border-slate-800 justify-between">
@@ -255,12 +254,6 @@ export default function Layout() {
             className="hidden md:flex p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
           >
             {collapsed ? <Menu className="w-4 h-4" /> : <X className="w-4 h-4" />}
-          </button>
-          <button 
-            onClick={() => setMobileMenuOpen(false)}
-            className="md:hidden p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
-          >
-            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -292,6 +285,33 @@ export default function Layout() {
         </div>
       </motion.aside>
 
+      {/* Mobile Menu Drawer (for extra items not in bottom nav) */}
+      <motion.div 
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-[#111827] shadow-xl transform transition-transform duration-300 ease-in-out md:hidden",
+          mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+         <div className="h-16 flex items-center px-4 border-b border-slate-200 dark:border-slate-800 justify-between">
+            <span className="font-bold text-slate-900 dark:text-white">Menú</span>
+            <button onClick={() => setMobileMenuOpen(false)} className="p-2">
+              <X className="w-5 h-5" />
+            </button>
+         </div>
+         <div className="p-4 space-y-2">
+            {user?.role === 'admin' && (
+              <NavLink to="/settings" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300">
+                <Settings className="w-5 h-5" />
+                <span>Configuración</span>
+              </NavLink>
+            )}
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-red-50 text-red-500">
+              <LogOut className="w-5 h-5" />
+              <span>Cerrar Sesión</span>
+            </button>
+         </div>
+      </motion.div>
+
       {/* Main Content */}
       <div className="flex-1 flex flex-col h-full overflow-hidden relative">
         {/* Header */}
@@ -301,7 +321,9 @@ export default function Layout() {
               onClick={() => setMobileMenuOpen(true)}
               className="md:hidden p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
             >
-              <Menu className="w-5 h-5" />
+              <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0">
+                <span className="text-white font-bold text-lg">G</span>
+              </div>
             </button>
             <h1 className="text-lg font-bold text-slate-900 dark:text-white hidden sm:block">
               {getPageTitle()}

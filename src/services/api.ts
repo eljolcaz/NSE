@@ -1,11 +1,11 @@
 const API_URL = '/api';
 
 export const api = {
-  login: async (email, password) => {
+  login: async (username, password) => {
     const res = await fetch(`${API_URL}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ username, password }),
     });
     if (!res.ok) throw new Error('Login failed');
     return res.json();

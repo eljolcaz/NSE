@@ -12,7 +12,8 @@ import {
   BrainCircuit,
   Edit,
   Save,
-  X
+  X,
+  Package
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { api } from '../services/api';
@@ -34,11 +35,8 @@ const InventoryItem = ({ item, onEdit }: { item: Product; onEdit: (item: Product
     <tr className="group border-b border-slate-100 dark:border-slate-800/60 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all duration-200">
       <td className="px-6 py-5 min-w-[200px]">
         <div className="flex items-center gap-4">
-          <div className={cn("size-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm transition-colors", 
-            isLowStock ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400" : 
-            "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400"
-          )}>
-            <span className="material-symbols-outlined text-2xl">inventory_2</span>
+          <div className="size-12 rounded-xl flex items-center justify-center shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+            <Package className="w-6 h-6" />
           </div>
           <div>
             <p className="text-base font-bold text-slate-900 dark:text-white">{item.name}</p>

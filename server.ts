@@ -49,15 +49,15 @@ const sendEvent = (data: any) => {
 
 // --- Auth Routes ---
 app.post('/api/login', (req: any, res: any) => {
-  const { email, password } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
+  const { username, password } = req.body;
+  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
 
   if (!user || !bcrypt.compareSync(password, user.password)) {
     return res.status(401).json({ message: 'Credenciales inválidas' });
   }
 
   const token = jwt.sign({ id: user.id, role: user.role, name: user.name, supplier_id: user.supplier_id }, JWT_SECRET, { expiresIn: '1h' });
-  res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, supplier_id: user.supplier_id } });
+  res.json({ token, user: { id: user.id, name: user.name, username: user.username, role: user.role, supplier_id: user.supplier_id } });
 });
 
 // --- SSE Endpoint ---
@@ -127,12 +127,13 @@ app.post('/api/notifications/mark-read', authenticateToken, (req: any, res: any)
 
 // --- Dashboard Stats ---
 app.get('/api/dashboard', authenticateToken, (req: any, res: any) => {
+  console.log('Dashboard requested by:', req.user.username, 'Role:', req.user.role);
   const stats: any = {};
 
   if (req.user.role === 'proveedor') {
     const supplierId = req.user.supplier_id;
-    const pendingOrders = db.prepare('SELECT COUNT(*) as count FROM orders WHERE supplier_id = ? AND status = "pendiente"').get(supplierId) as any;
-    const completedOrders = db.prepare('SELECT COUNT(*) as count FROM orders WHERE supplier_id = ? AND status = "recibido"').get(supplierId) as any;
+    const pendingOrders = db.prepare("SELECT COUNT(*) as count FROM orders WHERE supplier_id = ? AND status = 'pendiente'").get(supplierId) as any;
+    const completedOrders = db.prepare("SELECT COUNT(*) as count FROM orders WHERE supplier_id = ? AND (status = 'recibido' OR status = 'enviado')").get(supplierId) as any;
     const recentOrders = db.prepare('SELECT * FROM orders WHERE supplier_id = ? ORDER BY date DESC LIMIT 5').all(supplierId);
     
     stats.pendingOrders = pendingOrders.count;
@@ -141,15 +142,28 @@ app.get('/api/dashboard', authenticateToken, (req: any, res: any) => {
     
   } else {
     // Admin / Bodega
+    console.log('Fetching admin/bodega stats');
     const totalInventory = db.prepare('SELECT SUM(stock) as total FROM products').get() as any;
     const lowStock = db.prepare('SELECT * FROM products WHERE stock <= stock_minimo').all();
-    const recentOrdersCount = db.prepare('SELECT COUNT(*) as count FROM orders WHERE date >= date("now", "-7 days")').get() as any;
+    const recentOrdersCount = db.prepare("SELECT COUNT(*) as count FROM orders WHERE date >= date('now', '-7 days')").get() as any;
     const recentOrdersList = db.prepare('SELECT o.*, s.company as supplier_company FROM orders o JOIN suppliers s ON o.supplier_id = s.id ORDER BY o.date DESC LIMIT 5').all();
+    
+    // Get recent movements for dashboard
+    const recentMovements = db.prepare(`
+      SELECT m.*, p.name as product_name 
+      FROM movements m 
+      JOIN products p ON m.product_id = p.id 
+      ORDER BY m.date DESC 
+      LIMIT 5
+    `).all();
+    
+    console.log('Total Inventory:', totalInventory);
     
     stats.totalInventory = totalInventory.total;
     stats.lowStock = lowStock;
     stats.recentOrders = recentOrdersCount.count;
     stats.recentOrdersList = recentOrdersList;
+    stats.recentMovements = recentMovements;
   }
 
   res.json(stats);
@@ -193,19 +207,19 @@ app.get('/api/suppliers', authenticateToken, (req: any, res: any) => {
 
 app.post('/api/suppliers', authenticateToken, (req: any, res: any) => {
   if (req.user.role !== 'admin') return res.sendStatus(403);
-  const { name, company, phone, email, address, accessEmail, password } = req.body;
+  const { name, company, phone, email, address, accessUsername, password } = req.body;
   
   try {
     const transaction = db.transaction(() => {
       // 1. Create Supplier
-      const info = db.prepare('INSERT INTO suppliers (name, company, phone, email, address) VALUES (?, ?, ?, ?, ?)').run(name, company, phone, email, address);
+      const info = db.prepare('INSERT INTO suppliers (name, company, phone, email, address) VALUES (?, ?, ?, ?, ?)').run(name, company, phone, email || '', address);
       const supplierId = info.lastInsertRowid;
 
       // 2. Create User for Supplier if credentials provided
-      if (accessEmail && password) {
+      if (accessUsername && password) {
         const salt = bcrypt.genSaltSync(10);
         const hashedPassword = bcrypt.hashSync(password, salt);
-        db.prepare('INSERT INTO users (name, email, password, role, supplier_id) VALUES (?, ?, ?, ?, ?)').run(company, accessEmail, hashedPassword, 'proveedor', supplierId);
+        db.prepare('INSERT INTO users (name, username, password, role, supplier_id) VALUES (?, ?, ?, ?, ?)').run(company, accessUsername, hashedPassword, 'proveedor', supplierId);
       }
       return supplierId;
     });
@@ -214,7 +228,7 @@ app.post('/api/suppliers', authenticateToken, (req: any, res: any) => {
     res.json({ id: newSupplierId, ...req.body });
   } catch (error: any) {
     if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      return res.status(400).json({ message: 'El email de acceso ya está registrado.' });
+      return res.status(400).json({ message: 'El usuario de acceso ya está registrado.' });
     }
     console.error(error);
     res.status(500).json({ message: 'Error al crear proveedor' });

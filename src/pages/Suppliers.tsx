@@ -50,7 +50,7 @@ export default function Suppliers() {
     phone: '', 
     email: '', 
     address: '',
-    accessEmail: '',
+    accessUsername: '',
     password: ''
   });
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
@@ -77,7 +77,7 @@ export default function Suppliers() {
   }, [token]);
 
   const handleNewSupplier = () => {
-    setSupplierForm({ id: 0, name: '', company: '', phone: '', email: '', address: '', accessEmail: '', password: '' });
+    setSupplierForm({ id: 0, name: '', company: '', phone: '', email: '', address: '', accessUsername: '', password: '' });
     setIsEditing(false);
     setIsSupplierModalOpen(true);
   };
@@ -90,7 +90,7 @@ export default function Suppliers() {
       phone: supplier.phone, 
       email: supplier.email, 
       address: supplier.address,
-      accessEmail: '', // Don't show existing credentials
+      accessUsername: '', // Don't show existing credentials
       password: '' 
     });
     setIsEditing(true);
@@ -284,7 +284,7 @@ export default function Suppliers() {
                   required
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Teléfono</label>
                   <input 
@@ -293,17 +293,6 @@ export default function Suppliers() {
                     onChange={e => setSupplierForm({...supplierForm, phone: e.target.value})}
                     className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5"
                     placeholder="555-0000"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Email Contacto</label>
-                  <input 
-                    type="email" 
-                    value={supplierForm.email}
-                    onChange={e => setSupplierForm({...supplierForm, email: e.target.value})}
-                    className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5"
-                    placeholder="contacto@empresa.com"
                     required
                   />
                 </div>
@@ -328,13 +317,13 @@ export default function Suppliers() {
                   </h4>
                   <div className="space-y-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Email de Acceso</label>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Usuario de Acceso</label>
                       <input 
-                        type="email" 
-                        value={supplierForm.accessEmail}
-                        onChange={e => setSupplierForm({...supplierForm, accessEmail: e.target.value})}
+                        type="text" 
+                        value={supplierForm.accessUsername}
+                        onChange={e => setSupplierForm({...supplierForm, accessUsername: e.target.value})}
                         className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5"
-                        placeholder="usuario@gastrologix.com"
+                        placeholder="usuario_proveedor"
                         required={!isEditing}
                       />
                     </div>

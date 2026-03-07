@@ -43,15 +43,15 @@ export default function Login() {
             )}
             
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Usuario</label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
-                  type="email"
+                  type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:text-white transition-all"
-                  placeholder="Ingrese su email"
+                  placeholder="Ingrese su usuario"
                   required
                 />
               </div>

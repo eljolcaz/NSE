@@ -14,7 +14,8 @@ export default function Dashboard() {
     lowStock: [],
     pendingOrders: 0,
     completedOrders: 0,
-    recentOrdersList: []
+    recentOrdersList: [],
+    recentMovements: []
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -287,7 +288,10 @@ export default function Dashboard() {
                       Stock: {product.stock} {product.unidad_medida} (Mín: {product.stock_minimo})
                     </p>
                   </div>
-                  <button className="px-3 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-medium rounded-full hover:bg-amber-200 transition-colors">
+                  <button 
+                    onClick={() => navigate('/orders')}
+                    className="px-3 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-medium rounded-full hover:bg-amber-200 transition-colors"
+                  >
                     Reponer
                   </button>
                 </div>
@@ -298,31 +302,42 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Recent Activity Chart Placeholder */}
+        {/* Recent Movements */}
         <div className="bg-white dark:bg-[#111827] p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
-          <h3 className="font-bold text-slate-900 dark:text-white mb-4">Consumo Semanal</h3>
-          <div className="h-64 flex items-center justify-center text-slate-400 text-sm">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={[
-                { name: 'Lun', consumo: 40 },
-                { name: 'Mar', consumo: 30 },
-                { name: 'Mie', consumo: 20 },
-                { name: 'Jue', consumo: 27 },
-                { name: 'Vie', consumo: 18 },
-                { name: 'Sab', consumo: 23 },
-                { name: 'Dom', consumo: 34 },
-              ]}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
-                  itemStyle={{ color: '#fff' }}
-                />
-                <Bar dataKey="consumo" fill="#10B981" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-blue-500" />
+            Movimientos Recientes
+          </h3>
+          <div className="space-y-3">
+            {data.recentMovements && data.recentMovements.length > 0 ? (
+              data.recentMovements.map((mov: any) => (
+                <div key={mov.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-full ${mov.type === 'entrada' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
+                      {mov.type === 'entrada' ? <TrendingDown className="w-4 h-4 rotate-180" /> : <TrendingDown className="w-4 h-4" />}
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-900 dark:text-white">{mov.product_name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {new Date(mov.date).toLocaleDateString()} • {mov.reason}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`font-bold ${mov.type === 'entrada' ? 'text-emerald-600' : 'text-blue-600'}`}>
+                    {mov.type === 'entrada' ? '+' : '-'}{mov.quantity}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="text-slate-500 text-sm py-4 text-center">No hay movimientos recientes.</p>
+            )}
           </div>
+          <button 
+            onClick={() => navigate('/warehouse')}
+            className="w-full mt-4 py-2 text-sm text-slate-600 hover:text-blue-600 font-medium border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          >
+            Ver historial completo
+          </button>
         </div>
       </div>
       )}

@@ -13,7 +13,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
+    username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     role TEXT NOT NULL CHECK(role IN ('admin', 'bodega', 'proveedor')),
     supplier_id INTEGER,
@@ -92,7 +92,7 @@ db.exec(`
 `);
 
 // Seed Data
-const insertUser = db.prepare('INSERT OR IGNORE INTO users (name, email, password, role, supplier_id) VALUES (?, ?, ?, ?, ?)');
+const insertUser = db.prepare('INSERT OR IGNORE INTO users (name, username, password, role, supplier_id) VALUES (?, ?, ?, ?, ?)');
 const insertProduct = db.prepare('INSERT OR IGNORE INTO products (name, stock, stock_minimo, unidad_medida) VALUES (?, ?, ?, ?)');
 const insertSupplier = db.prepare('INSERT OR IGNORE INTO suppliers (name, company, phone, email, address) VALUES (?, ?, ?, ?, ?)');
 const insertSupplierProduct = db.prepare('INSERT OR IGNORE INTO supplier_products (supplier_id, product_id) VALUES (?, ?)');
@@ -122,9 +122,9 @@ insertSupplier.run('Juan Pérez', 'AgroFresh', '555-0101', 'ventas@agrofresh.com
 insertSupplier.run('Maria Lopez', 'Verduras del Valle', '555-0202', 'contacto@verdurasvalle.com', 'Av. Siempre Viva 742');
 
 // Insert Users (referencing suppliers)
-insertUser.run('Administrador', 'admin@gastrologix.com', hashAdmin, 'admin', null);
-insertUser.run('Encargado Bodega', 'bodega@gastrologix.com', hashBodega, 'bodega', null);
-insertUser.run('Proveedor Principal', 'proveedor@gastrologix.com', hashProveedor, 'proveedor', 1);
+insertUser.run('Administrador', 'admin', hashAdmin, 'admin', null);
+insertUser.run('Encargado Bodega', 'bodega', hashBodega, 'bodega', null);
+insertUser.run('Proveedor Principal', 'proveedor', hashProveedor, 'proveedor', 1);
 
 insertProduct.run('Tomate', 12, 20, 'kg');
 insertProduct.run('Lechuga', 50, 30, 'unidad');
