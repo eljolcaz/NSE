@@ -10,7 +10,7 @@ import { supabase } from './src/lib/supabaseClient';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const app = express();
+export const app = express();
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_change_me';
 
@@ -617,23 +617,18 @@ app.post('/api/predict', authenticateToken, async (req: any, res: any) => {
   }
 });
 
-async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
+// Start Server (Only in development or if not running as a function)
+if (process.env.NODE_ENV !== 'production' && !process.env.NETLIFY) {
+  async function startServer() {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    app.use(express.static('dist'));
-    app.get('*', (req, res) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on http://localhost:${PORT}`);
     });
   }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  startServer();
 }
-
-startServer();
