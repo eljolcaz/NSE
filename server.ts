@@ -1,14 +1,9 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { GoogleGenAI } from "@google/genai";
 import { supabase } from './src/lib/supabaseClient';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const app = express();
 const PORT = 3000;
@@ -620,6 +615,7 @@ app.post('/api/predict', authenticateToken, async (req: any, res: any) => {
 // Start Server (Only in development or if not running as a function)
 if (process.env.NODE_ENV !== 'production' && !process.env.NETLIFY) {
   async function startServer() {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

@@ -3,7 +3,7 @@
   publish = "dist"
 
 [functions]
-  external_node_modules = ["express", "cors", "jsonwebtoken", "bcryptjs", "@supabase/supabase-js", "@google/genai"]
+  external_node_modules = ["express", "cors", "jsonwebtoken", "bcryptjs", "@supabase/supabase-js", "@google/genai", "lightningcss", "esbuild"]
   node_bundler = "esbuild"
 
 [[redirects]]
