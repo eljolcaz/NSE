@@ -1,24 +1,15 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
-import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from "@google/genai";
+import { supabase } from './src/lib/supabaseClient';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.resolve(__dirname, 'gastrologix.db');
 
-// Initialize DB if not exists
-if (!fs.existsSync(dbPath)) {
-  console.log('Database not found. Initializing...');
-  import('./db/init.ts');
-}
-
-const db = new Database(dbPath);
 const app = express();
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_change_me';
@@ -48,11 +39,16 @@ const sendEvent = (data: any) => {
 };
 
 // --- Auth Routes ---
-app.post('/api/login', (req: any, res: any) => {
+app.post('/api/login', async (req: any, res: any) => {
   const { username, password } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
+  
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('username', username)
+    .single();
 
-  if (!user || !bcrypt.compareSync(password, user.password)) {
+  if (error || !user || !bcrypt.compareSync(password, user.password)) {
     return res.status(401).json({ message: 'Credenciales inválidas' });
   }
 
@@ -82,258 +78,335 @@ app.get('/api/notifications', (req: any, res: any) => {
 });
 
 // --- Notification Routes ---
-app.get('/api/user/notifications', authenticateToken, (req: any, res: any) => {
-  let query = 'SELECT * FROM notifications WHERE 1=1';
-  const params = [];
+app.get('/api/user/notifications', authenticateToken, async (req: any, res: any) => {
+  let query = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(50);
 
   if (req.user.role === 'proveedor') {
-    query += ' AND supplier_id = ?';
-    params.push(req.user.supplier_id);
+    query = query.eq('supplier_id', req.user.supplier_id);
   } else {
-    // Admin and Bodega see general notifications or specific ones
-    // For simplicity, let's say they see all non-supplier specific ones or ones for them
-    // But currently we only have supplier_id. Let's assume null supplier_id means internal notification.
-    query += ' AND (supplier_id IS NULL OR supplier_id = ?)';
-    params.push(req.user.supplier_id || -1); // -1 if null to avoid matching nothing if logic requires
-    // Actually, let's just show all for admin/bodega for now, or filter by user_id if we had it.
-    // Let's keep it simple: Providers see theirs. Admin/Bodega see everything else?
-    // Let's just return all for Admin/Bodega for now to ensure they see alerts.
-    if (req.user.role === 'admin' || req.user.role === 'bodega') {
-       query = 'SELECT * FROM notifications WHERE supplier_id IS NULL'; 
-       // Or maybe we want them to see everything?
-       // Let's stick to the requested logic: Providers see theirs.
-    }
+    query = query.is('supplier_id', null);
   }
+
+  const { data: notifs, error } = await query;
   
-  // Better logic:
-  if (req.user.role === 'proveedor') {
-     const notifs = db.prepare('SELECT * FROM notifications WHERE supplier_id = ? ORDER BY created_at DESC LIMIT 50').all(req.user.supplier_id);
-     return res.json(notifs);
-  } else {
-     const notifs = db.prepare('SELECT * FROM notifications WHERE supplier_id IS NULL ORDER BY created_at DESC LIMIT 50').all();
-     return res.json(notifs);
-  }
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(notifs);
 });
 
-app.post('/api/notifications/mark-read', authenticateToken, (req: any, res: any) => {
-  // Mark all as read for the user context
+app.post('/api/notifications/mark-read', authenticateToken, async (req: any, res: any) => {
+  let query = supabase.from('notifications').update({ read: true });
+
   if (req.user.role === 'proveedor') {
-    db.prepare('UPDATE notifications SET read = 1 WHERE supplier_id = ?').run(req.user.supplier_id);
+    query = query.eq('supplier_id', req.user.supplier_id);
   } else {
-    db.prepare('UPDATE notifications SET read = 1 WHERE supplier_id IS NULL').run();
+    query = query.is('supplier_id', null);
   }
+
+  const { error } = await query;
+  if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 });
 
 // --- Dashboard Stats ---
-app.get('/api/dashboard', authenticateToken, (req: any, res: any) => {
+app.get('/api/dashboard', authenticateToken, async (req: any, res: any) => {
   console.log('Dashboard requested by:', req.user.username, 'Role:', req.user.role);
   const stats: any = {};
 
   if (req.user.role === 'proveedor') {
     const supplierId = req.user.supplier_id;
-    const pendingOrders = db.prepare("SELECT COUNT(*) as count FROM orders WHERE supplier_id = ? AND status = 'pendiente'").get(supplierId) as any;
-    const completedOrders = db.prepare("SELECT COUNT(*) as count FROM orders WHERE supplier_id = ? AND (status = 'recibido' OR status = 'enviado')").get(supplierId) as any;
-    const recentOrders = db.prepare('SELECT * FROM orders WHERE supplier_id = ? ORDER BY date DESC LIMIT 5').all(supplierId);
     
-    stats.pendingOrders = pendingOrders.count;
-    stats.completedOrders = completedOrders.count;
-    stats.recentOrdersList = recentOrders;
+    const { count: pendingOrders } = await supabase
+      .from('orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('supplier_id', supplierId)
+      .eq('status', 'pendiente');
+
+    const { count: completedOrders } = await supabase
+      .from('orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('supplier_id', supplierId)
+      .in('status', ['recibido', 'enviado']);
+
+    const { data: recentOrders } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('supplier_id', supplierId)
+      .order('date', { ascending: false })
+      .limit(5);
+    
+    stats.pendingOrders = pendingOrders || 0;
+    stats.completedOrders = completedOrders || 0;
+    stats.recentOrdersList = recentOrders || [];
     
   } else {
     // Admin / Bodega
     console.log('Fetching admin/bodega stats');
-    const totalInventory = db.prepare('SELECT SUM(stock) as total FROM products').get() as any;
-    const lowStock = db.prepare('SELECT * FROM products WHERE stock <= stock_minimo').all();
-    const recentOrdersCount = db.prepare("SELECT COUNT(*) as count FROM orders WHERE date >= date('now', '-7 days')").get() as any;
-    const recentOrdersList = db.prepare('SELECT o.*, s.company as supplier_company FROM orders o JOIN suppliers s ON o.supplier_id = s.id ORDER BY o.date DESC LIMIT 5').all();
     
-    // Get recent movements for dashboard
-    const recentMovements = db.prepare(`
-      SELECT m.*, p.name as product_name 
-      FROM movements m 
-      JOIN products p ON m.product_id = p.id 
-      ORDER BY m.date DESC 
-      LIMIT 5
-    `).all();
+    // Total Inventory
+    const { data: products } = await supabase.from('products').select('stock');
+    const totalInventory = products?.reduce((sum, p) => sum + (p.stock || 0), 0) || 0;
+
+    // Low Stock
+    const { data: lowStock } = await supabase.from('products').select('*');
+    const lowStockList = (lowStock || []).filter((p: any) => p.stock <= p.stock_minimo);
+
+    // Recent Orders (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     
-    console.log('Total Inventory:', totalInventory);
+    const { count: recentOrdersCount } = await supabase
+      .from('orders')
+      .select('*', { count: 'exact', head: true })
+      .gte('date', sevenDaysAgo.toISOString());
+
+    // Recent Orders List
+    const { data: recentOrdersList } = await supabase
+      .from('orders')
+      .select('*, suppliers(company)')
+      .order('date', { ascending: false })
+      .limit(5);
+
+    // Recent Movements
+    const { data: recentMovements } = await supabase
+      .from('movements')
+      .select('*, products(name)')
+      .order('date', { ascending: false })
+      .limit(5);
     
-    stats.totalInventory = totalInventory.total;
-    stats.lowStock = lowStock;
-    stats.recentOrders = recentOrdersCount.count;
-    stats.recentOrdersList = recentOrdersList;
-    stats.recentMovements = recentMovements;
+    // Flatten the structure for frontend compatibility
+    const formattedOrders = recentOrdersList?.map((o: any) => ({
+      ...o,
+      supplier_company: o.suppliers?.company
+    })) || [];
+
+    const formattedMovements = recentMovements?.map((m: any) => ({
+      ...m,
+      product_name: m.products?.name
+    })) || [];
+    
+    stats.totalInventory = totalInventory;
+    stats.lowStock = lowStockList;
+    stats.recentOrders = recentOrdersCount || 0;
+    stats.recentOrdersList = formattedOrders;
+    stats.recentMovements = formattedMovements;
   }
 
   res.json(stats);
 });
 
 // --- Product Routes ---
-app.get('/api/products', authenticateToken, (req: any, res: any) => {
-  const products = db.prepare('SELECT * FROM products').all();
+app.get('/api/products', authenticateToken, async (req: any, res: any) => {
+  const { data: products, error } = await supabase.from('products').select('*');
+  if (error) return res.status(500).json({ error: error.message });
   res.json(products);
 });
 
-app.post('/api/products', authenticateToken, (req: any, res: any) => {
+app.post('/api/products', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'admin' && req.user.role !== 'bodega') return res.sendStatus(403);
   const { name, stock, stock_minimo, unidad_medida } = req.body;
-  const info = db.prepare('INSERT INTO products (name, stock, stock_minimo, unidad_medida) VALUES (?, ?, ?, ?)').run(name, stock, stock_minimo, unidad_medida);
-  res.json({ id: info.lastInsertRowid, ...req.body });
+  
+  const { data, error } = await supabase
+    .from('products')
+    .insert([{ name, stock, stock_minimo, unidad_medida }])
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
-app.put('/api/products/:id', authenticateToken, (req: any, res: any) => {
+app.put('/api/products/:id', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'admin' && req.user.role !== 'bodega') return res.sendStatus(403);
   const { name, stock, stock_minimo, unidad_medida } = req.body;
-  db.prepare('UPDATE products SET name = ?, stock = ?, stock_minimo = ?, unidad_medida = ? WHERE id = ?').run(name, stock, stock_minimo, unidad_medida, req.params.id);
-  res.json({ id: req.params.id, ...req.body });
+  
+  const { data, error } = await supabase
+    .from('products')
+    .update({ name, stock, stock_minimo, unidad_medida })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
 // --- Supplier Routes ---
-app.get('/api/suppliers', authenticateToken, (req: any, res: any) => {
-  const suppliers = db.prepare('SELECT * FROM suppliers').all();
+app.get('/api/suppliers', authenticateToken, async (req: any, res: any) => {
+  const { data: suppliers, error } = await supabase.from('suppliers').select('*');
+  if (error) return res.status(500).json({ error: error.message });
+
   // Get products for each supplier
-  const suppliersWithProducts = suppliers.map(supplier => {
-    const products = db.prepare(`
-      SELECT p.id, p.name 
-      FROM products p 
-      JOIN supplier_products sp ON p.id = sp.product_id 
-      WHERE sp.supplier_id = ?
-    `).all(supplier.id);
-    return { ...supplier, products };
-  });
-  res.json(suppliersWithProducts);
+  const { data: suppliersWithProducts, error: joinError } = await supabase
+    .from('suppliers')
+    .select(`
+      *,
+      products:supplier_products(
+        products(*)
+      )
+    `);
+
+  if (joinError) return res.status(500).json({ error: joinError.message });
+
+  // Transform to match expected format: supplier.products = [product, product]
+  const formatted = suppliersWithProducts?.map((s: any) => ({
+    ...s,
+    products: s.products.map((sp: any) => sp.products)
+  }));
+
+  res.json(formatted);
 });
 
-app.post('/api/suppliers', authenticateToken, (req: any, res: any) => {
+app.post('/api/suppliers', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'admin') return res.sendStatus(403);
   const { name, company, phone, email, address, accessUsername, password } = req.body;
   
-  try {
-    const transaction = db.transaction(() => {
-      // 1. Create Supplier
-      const info = db.prepare('INSERT INTO suppliers (name, company, phone, email, address) VALUES (?, ?, ?, ?, ?)').run(name, company, phone, email || '', address);
-      const supplierId = info.lastInsertRowid;
+  // 1. Create Supplier
+  const { data: supplier, error: supplierError } = await supabase
+    .from('suppliers')
+    .insert([{ name, company, phone, email: email || null, address }])
+    .select()
+    .single();
 
-      // 2. Create User for Supplier if credentials provided
-      if (accessUsername && password) {
-        const salt = bcrypt.genSaltSync(10);
-        const hashedPassword = bcrypt.hashSync(password, salt);
-        db.prepare('INSERT INTO users (name, username, password, role, supplier_id) VALUES (?, ?, ?, ?, ?)').run(company, accessUsername, hashedPassword, 'proveedor', supplierId);
-      }
-      return supplierId;
-    });
+  if (supplierError) return res.status(500).json({ message: supplierError.message });
 
-    const newSupplierId = transaction();
-    res.json({ id: newSupplierId, ...req.body });
-  } catch (error: any) {
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-      return res.status(400).json({ message: 'El usuario de acceso ya está registrado.' });
+  // 2. Create User for Supplier if credentials provided
+  if (accessUsername && password) {
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(password, salt);
+    
+    const { error: userError } = await supabase
+      .from('users')
+      .insert([{ 
+        name: company, 
+        username: accessUsername, 
+        password: hashedPassword, 
+        role: 'proveedor', 
+        supplier_id: supplier.id 
+      }]);
+      
+    if (userError) {
+      console.error('Error creating user for supplier:', userError);
     }
-    console.error(error);
-    res.status(500).json({ message: 'Error al crear proveedor' });
   }
+
+  res.json(supplier);
 });
 
-app.put('/api/suppliers/:id', authenticateToken, (req: any, res: any) => {
+app.put('/api/suppliers/:id', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'admin') return res.sendStatus(403);
   const { name, company, phone, email, address } = req.body;
   const supplierId = req.params.id;
   
-  db.prepare('UPDATE suppliers SET name = ?, company = ?, phone = ?, email = ?, address = ? WHERE id = ?').run(name, company, phone, email, address, supplierId);
+  const { data, error } = await supabase
+    .from('suppliers')
+    .update({ name, company, phone, email, address })
+    .eq('id', supplierId)
+    .select()
+    .single();
+    
+  if (error) return res.status(500).json({ error: error.message });
   
   // Optionally update user name if company name changed
-  db.prepare('UPDATE users SET name = ? WHERE supplier_id = ?').run(company, supplierId);
+  await supabase
+    .from('users')
+    .update({ name: company })
+    .eq('supplier_id', supplierId);
   
-  res.json({ id: supplierId, ...req.body });
+  res.json(data);
 });
 
-app.delete('/api/suppliers/:id', authenticateToken, (req: any, res: any) => {
+app.delete('/api/suppliers/:id', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'admin') return res.sendStatus(403);
   const supplierId = req.params.id;
   
-  const transaction = db.transaction(() => {
-    // Delete associated user
-    db.prepare('DELETE FROM users WHERE supplier_id = ?').run(supplierId);
-    // Delete supplier products
-    db.prepare('DELETE FROM supplier_products WHERE supplier_id = ?').run(supplierId);
-    // Delete supplier
-    db.prepare('DELETE FROM suppliers WHERE id = ?').run(supplierId);
-  });
-  
-  transaction();
+  const { error } = await supabase
+    .from('suppliers')
+    .delete()
+    .eq('id', supplierId);
+
+  if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 });
 
-app.post('/api/suppliers/:id/products', authenticateToken, (req: any, res: any) => {
+app.post('/api/suppliers/:id/products', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'admin') return res.sendStatus(403);
   const { productIds } = req.body; // Array of product IDs
   const supplierId = req.params.id;
   
-  const insert = db.prepare('INSERT OR IGNORE INTO supplier_products (supplier_id, product_id) VALUES (?, ?)');
-  const deleteExisting = db.prepare('DELETE FROM supplier_products WHERE supplier_id = ?');
+  // Delete existing
+  await supabase.from('supplier_products').delete().eq('supplier_id', supplierId);
   
-  const transaction = db.transaction((ids) => {
-    deleteExisting.run(supplierId);
-    for (const pid of ids) insert.run(supplierId, pid);
-  });
+  // Insert new
+  if (productIds && productIds.length > 0) {
+    const rows = productIds.map((pid: number) => ({ supplier_id: supplierId, product_id: pid }));
+    const { error } = await supabase.from('supplier_products').insert(rows);
+    if (error) return res.status(500).json({ error: error.message });
+  }
   
-  transaction(productIds);
   res.json({ success: true });
 });
 
 // --- Order Routes ---
-app.get('/api/orders', authenticateToken, (req: any, res: any) => {
-  let query = `
-    SELECT o.*, s.name as supplier_name, s.company as supplier_company 
-    FROM orders o 
-    JOIN suppliers s ON o.supplier_id = s.id
-  `;
+app.get('/api/orders', authenticateToken, async (req: any, res: any) => {
+  let query = supabase
+    .from('orders')
+    .select(`
+      *,
+      suppliers (name, company),
+      order_details (
+        *,
+        products (name)
+      )
+    `)
+    .order('date', { ascending: false });
   
-  const params: any[] = [];
   if (req.user.role === 'proveedor' && req.user.supplier_id) {
-    query += ' WHERE o.supplier_id = ?';
-    params.push(req.user.supplier_id);
+    query = query.eq('supplier_id', req.user.supplier_id);
   }
   
-  query += ' ORDER BY o.date DESC';
+  const { data: orders, error } = await query;
+  if (error) return res.status(500).json({ error: error.message });
   
-  const orders = db.prepare(query).all(...params);
+  // Flatten/Format for frontend
+  const formatted = orders?.map((o: any) => ({
+    ...o,
+    supplier_name: o.suppliers?.name,
+    supplier_company: o.suppliers?.company,
+    details: o.order_details?.map((od: any) => ({
+      ...od,
+      product_name: od.products?.name
+    }))
+  }));
   
-  const ordersWithDetails = orders.map((order: any) => {
-    const details = db.prepare(`
-      SELECT od.*, p.name as product_name 
-      FROM order_details od 
-      JOIN products p ON od.product_id = p.id 
-      WHERE od.order_id = ?
-    `).all(order.id);
-    return { ...order, details };
-  });
-  
-  res.json(ordersWithDetails);
+  res.json(formatted);
 });
 
-app.post('/api/orders', authenticateToken, (req: any, res: any) => {
+app.post('/api/orders', authenticateToken, async (req: any, res: any) => {
   if (req.user.role === 'proveedor') return res.sendStatus(403);
   const { supplier_id, products } = req.body; // products: [{ product_id, quantity }]
   
-  const insertOrder = db.prepare('INSERT INTO orders (supplier_id, status) VALUES (?, ?)');
-  const insertDetail = db.prepare('INSERT INTO order_details (order_id, product_id, quantity) VALUES (?, ?, ?)');
+  // 1. Create Order
+  const { data: order, error: orderError } = await supabase
+    .from('orders')
+    .insert([{ supplier_id, status: 'pendiente' }])
+    .select()
+    .single();
+
+  if (orderError) return res.status(500).json({ error: orderError.message });
   
-  const transaction = db.transaction((items) => {
-    const info = insertOrder.run(supplier_id, 'pendiente');
-    const orderId = info.lastInsertRowid;
-    for (const item of items) {
-      insertDetail.run(orderId, item.product_id, item.quantity);
-    }
-    return orderId;
-  });
+  // 2. Create Details
+  const details = products.map((p: any) => ({
+    order_id: order.id,
+    product_id: p.product_id,
+    quantity: p.quantity
+  }));
   
-  const orderId = transaction(products);
+  const { error: detailsError } = await supabase.from('order_details').insert(details);
+  if (detailsError) return res.status(500).json({ error: detailsError.message });
   
   // Notify supplier
-  const message = `Nuevo pedido #${orderId} creado`;
-  db.prepare('INSERT INTO notifications (supplier_id, title, message) VALUES (?, ?, ?)').run(supplier_id, 'Nuevo Pedido', message);
+  const message = `Nuevo pedido #${order.id} creado`;
+  await supabase.from('notifications').insert([{ supplier_id, title: 'Nuevo Pedido', message }]);
   
   sendEvent({
     type: 'ORDER_CREATED',
@@ -341,52 +414,70 @@ app.post('/api/orders', authenticateToken, (req: any, res: any) => {
     supplier_id: supplier_id
   });
   
-  res.json({ id: orderId, status: 'pendiente' });
+  res.json({ id: order.id, status: 'pendiente' });
 });
 
-app.put('/api/orders/:id/status', authenticateToken, (req: any, res: any) => {
+app.put('/api/orders/:id/status', authenticateToken, async (req: any, res: any) => {
   const { status } = req.body;
   const orderId = req.params.id;
   
   // Validate transitions based on role
   if (req.user.role === 'proveedor' && status !== 'enviado') return res.sendStatus(403);
-  // Bodega can only mark as received if it was sent
-  // Simplified for now
   
-  db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, orderId);
+  const { error } = await supabase
+    .from('orders')
+    .update({ status })
+    .eq('id', orderId);
+
+  if (error) return res.status(500).json({ error: error.message });
   
-  // If received, update stock automatically?
+  // If received, update stock automatically
   if (status === 'recibido') {
-    const details = db.prepare('SELECT * FROM order_details WHERE order_id = ?').all(orderId);
-    const updateStock = db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?');
-    const insertMovement = db.prepare('INSERT INTO movements (product_id, type, quantity, reason) VALUES (?, ?, ?, ?)');
-    
-    const stockTransaction = db.transaction((items) => {
-      for (const item of items) {
-        updateStock.run(item.quantity, item.product_id);
-        insertMovement.run(item.product_id, 'entrada', item.quantity, `Pedido #${orderId} recibido`);
+    const { data: details } = await supabase
+      .from('order_details')
+      .select('*')
+      .eq('order_id', orderId);
+      
+    if (details) {
+      for (const item of details) {
+        // Update stock (fetch first to add)
+        const { data: product } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
+        if (product) {
+          await supabase
+            .from('products')
+            .update({ stock: (product.stock || 0) + item.quantity })
+            .eq('id', item.product_id);
+            
+          await supabase
+            .from('movements')
+            .insert([{
+              product_id: item.product_id,
+              type: 'entrada',
+              quantity: item.quantity,
+              reason: `Pedido #${orderId} recibido`
+            }]);
+        }
       }
-    });
-    stockTransaction(details);
+    }
   }
 
   // Notify relevant parties
   let targetSupplierId = null;
 
   // Get supplier ID for this order
-  const order = db.prepare('SELECT supplier_id FROM orders WHERE id = ?').get(orderId) as any;
+  const { data: order } = await supabase.from('orders').select('supplier_id').eq('id', orderId).single();
   if (order) {
     targetSupplierId = order.supplier_id;
   }
 
   if (status === 'enviado') {
-    // Notify Admin/Bodega that order is on the way
-    db.prepare('INSERT INTO notifications (title, message) VALUES (?, ?)').run('Pedido Enviado', `El pedido #${orderId} ha sido enviado por el proveedor.`);
+    // Notify Admin/Bodega
+    await supabase.from('notifications').insert([{ title: 'Pedido Enviado', message: `El pedido #${orderId} ha sido enviado por el proveedor.` }]);
     sendEvent({ type: 'ORDER_UPDATED', message: `El pedido #${orderId} ha sido enviado.`, supplier_id: null });
   } else if (status === 'recibido') {
-    // Notify Supplier that order was received
+    // Notify Supplier
     if (targetSupplierId) {
-       db.prepare('INSERT INTO notifications (supplier_id, title, message) VALUES (?, ?, ?)').run(targetSupplierId, 'Pedido Recibido', `Tu pedido #${orderId} ha sido recibido y procesado.`);
+       await supabase.from('notifications').insert([{ supplier_id: targetSupplierId, title: 'Pedido Recibido', message: `Tu pedido #${orderId} ha sido recibido y procesado.` }]);
        sendEvent({ type: 'ORDER_UPDATED', message: `Tu pedido #${orderId} ha sido recibido.`, supplier_id: targetSupplierId });
     }
   }
@@ -395,48 +486,48 @@ app.put('/api/orders/:id/status', authenticateToken, (req: any, res: any) => {
 });
 
 // --- Movement Routes ---
-app.get('/api/movements', authenticateToken, (req: any, res: any) => {
-  const movements = db.prepare(`
-    SELECT m.*, p.name as product_name 
-    FROM movements m 
-    JOIN products p ON m.product_id = p.id 
-    ORDER BY m.date DESC
-  `).all();
-  res.json(movements);
+app.get('/api/movements', authenticateToken, async (req: any, res: any) => {
+  const { data: movements, error } = await supabase
+    .from('movements')
+    .select('*, products(name)')
+    .order('date', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const formatted = movements?.map((m: any) => ({
+    ...m,
+    product_name: m.products?.name
+  }));
+
+  res.json(formatted);
 });
 
-app.post('/api/movements', authenticateToken, (req: any, res: any) => {
+app.post('/api/movements', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'bodega' && req.user.role !== 'admin') return res.sendStatus(403);
   const { product_id, type, quantity, reason } = req.body;
   
-  const updateStock = db.prepare(`UPDATE products SET stock = stock ${type === 'entrada' ? '+' : '-'} ? WHERE id = ?`);
-  const insertMovement = db.prepare('INSERT INTO movements (product_id, type, quantity, reason) VALUES (?, ?, ?, ?)');
+  // Update stock
+  const { data: product } = await supabase.from('products').select('stock').eq('id', product_id).single();
+  if (!product) return res.status(404).json({ message: 'Product not found' });
   
-  const transaction = db.transaction(() => {
-    updateStock.run(quantity, product_id);
-    insertMovement.run(product_id, type, quantity, reason);
-  });
+  const newStock = type === 'entrada' ? (product.stock || 0) + quantity : (product.stock || 0) - quantity;
   
-  transaction();
+  await supabase.from('products').update({ stock: newStock }).eq('id', product_id);
+  
+  const { error } = await supabase
+    .from('movements')
+    .insert([{ product_id, type, quantity, reason }]);
+  
+  if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 });
 
-// --- Dashboard & AI ---
-app.get('/api/dashboard', authenticateToken, (req: any, res: any) => {
-  const lowStock = db.prepare('SELECT * FROM products WHERE stock <= stock_minimo').all();
-  const totalInventory = db.prepare('SELECT SUM(stock) as total FROM products').get();
-  const recentOrders = db.prepare('SELECT COUNT(*) as count FROM orders WHERE date >= date("now", "-7 days")').get();
-  
-  res.json({
-    lowStock,
-    totalInventory: totalInventory.total || 0,
-    recentOrders: recentOrders.count || 0
-  });
-});
-
+// --- AI Prediction ---
 app.get('/api/predict', authenticateToken, async (req: any, res: any) => {
   try {
-    const products = db.prepare('SELECT * FROM products').all();
+    const { data: products } = await supabase.from('products').select('*');
+    if (!products) return res.status(500).json({ error: 'No products found' });
+    
     const lowStock = products.filter((p: any) => p.stock <= p.stock_minimo);
     
     const prompt = `
@@ -472,8 +563,14 @@ app.get('/api/predict', authenticateToken, async (req: any, res: any) => {
 
 app.post('/api/predict', authenticateToken, async (req: any, res: any) => {
   const { productId } = req.body;
-  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(productId);
-  const movements = db.prepare('SELECT * FROM movements WHERE product_id = ? AND type = "salida" ORDER BY date DESC LIMIT 30').all(productId);
+  const { data: product } = await supabase.from('products').select('*').eq('id', productId).single();
+  const { data: movements } = await supabase
+    .from('movements')
+    .select('*')
+    .eq('product_id', productId)
+    .eq('type', 'salida')
+    .order('date', { ascending: false })
+    .limit(30);
   
   if (!product) return res.status(404).json({ message: 'Product not found' });
 
@@ -508,8 +605,8 @@ app.post('/api/predict', authenticateToken, async (req: any, res: any) => {
   } catch (error) {
     console.error('AI Error:', error);
     // Fallback logic
-    const totalOut = movements.reduce((sum, m) => sum + m.quantity, 0);
-    const avgOut = totalOut / (movements.length || 1);
+    const totalOut = (movements || []).reduce((sum: number, m: any) => sum + m.quantity, 0);
+    const avgOut = totalOut / ((movements || []).length || 1);
     const shortage = product.stock < avgOut * 7;
     
     res.json({
@@ -520,7 +617,6 @@ app.post('/api/predict', authenticateToken, async (req: any, res: any) => {
   }
 });
 
-// Start Server
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
