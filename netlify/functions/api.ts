@@ -1,4 +1,12 @@
 import serverless from 'serverless-http';
-import { app } from '../../server';
 
-export const handler = serverless(app);
+let serverlessHandler: any;
+
+export const handler = async (event: any, context: any) => {
+  if (!serverlessHandler) {
+    process.env.IS_SERVERLESS = 'true';
+    const { app } = await import('../../server');
+    serverlessHandler = serverless(app);
+  }
+  return serverlessHandler(event, context);
+};

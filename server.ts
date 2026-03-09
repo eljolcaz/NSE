@@ -624,10 +624,19 @@ app.use('/api', apiRouter);
 app.use('/.netlify/functions/api', apiRouter);
 
 // Start Server (Only if not running as a Netlify function)
-if (!process.env.NETLIFY) {
+const isServerless = !!(
+  process.env.IS_SERVERLESS ||
+  process.env.LAMBDA_TASK_ROOT || 
+  process.env.AWS_EXECUTION_ENV || 
+  process.env.NETLIFY ||
+  process.env.FUNCTIONS_EMULATOR
+);
+
+if (!isServerless) {
   async function startServer() {
     if (process.env.NODE_ENV !== 'production') {
-      const { createServer: createViteServer } = await import('vite');
+      const viteModule = 'vite';
+      const { createServer: createViteServer } = await import(viteModule);
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: 'spa',
