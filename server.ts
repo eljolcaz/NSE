@@ -12,6 +12,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_change_me';
 app.use(cors());
 app.use(express.json());
 
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
 // Middleware to verify token
 const authenticateToken = (req: any, res: any, next: any) => {
   const authHeader = req.headers['authorization'];
@@ -33,8 +38,10 @@ const sendEvent = (data: any) => {
   clients.forEach(client => client.res.write(`data: ${JSON.stringify(data)}\n\n`));
 };
 
+const apiRouter = express.Router();
+
 // --- Auth Routes ---
-app.post('/api/login', async (req: any, res: any) => {
+apiRouter.post('/login', async (req: any, res: any) => {
   const { username, password } = req.body;
   
   const { data: user, error } = await supabase
@@ -52,7 +59,7 @@ app.post('/api/login', async (req: any, res: any) => {
 });
 
 // --- SSE Endpoint ---
-app.get('/api/notifications', (req: any, res: any) => {
+apiRouter.get('/notifications', (req: any, res: any) => {
   const headers = {
     'Content-Type': 'text/event-stream',
     'Connection': 'keep-alive',
@@ -73,7 +80,7 @@ app.get('/api/notifications', (req: any, res: any) => {
 });
 
 // --- Notification Routes ---
-app.get('/api/user/notifications', authenticateToken, async (req: any, res: any) => {
+apiRouter.get('/user/notifications', authenticateToken, async (req: any, res: any) => {
   let query = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(50);
 
   if (req.user.role === 'proveedor') {
@@ -88,7 +95,7 @@ app.get('/api/user/notifications', authenticateToken, async (req: any, res: any)
   res.json(notifs);
 });
 
-app.post('/api/notifications/mark-read', authenticateToken, async (req: any, res: any) => {
+apiRouter.post('/notifications/mark-read', authenticateToken, async (req: any, res: any) => {
   let query = supabase.from('notifications').update({ read: true });
 
   if (req.user.role === 'proveedor') {
@@ -103,7 +110,7 @@ app.post('/api/notifications/mark-read', authenticateToken, async (req: any, res
 });
 
 // --- Dashboard Stats ---
-app.get('/api/dashboard', authenticateToken, async (req: any, res: any) => {
+apiRouter.get('/dashboard', authenticateToken, async (req: any, res: any) => {
   console.log('Dashboard requested by:', req.user.username, 'Role:', req.user.role);
   const stats: any = {};
 
@@ -190,13 +197,13 @@ app.get('/api/dashboard', authenticateToken, async (req: any, res: any) => {
 });
 
 // --- Product Routes ---
-app.get('/api/products', authenticateToken, async (req: any, res: any) => {
+apiRouter.get('/products', authenticateToken, async (req: any, res: any) => {
   const { data: products, error } = await supabase.from('products').select('*');
   if (error) return res.status(500).json({ error: error.message });
   res.json(products);
 });
 
-app.post('/api/products', authenticateToken, async (req: any, res: any) => {
+apiRouter.post('/products', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'admin' && req.user.role !== 'bodega') return res.sendStatus(403);
   const { name, stock, stock_minimo, unidad_medida } = req.body;
   
@@ -210,7 +217,7 @@ app.post('/api/products', authenticateToken, async (req: any, res: any) => {
   res.json(data);
 });
 
-app.put('/api/products/:id', authenticateToken, async (req: any, res: any) => {
+apiRouter.put('/products/:id', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'admin' && req.user.role !== 'bodega') return res.sendStatus(403);
   const { name, stock, stock_minimo, unidad_medida } = req.body;
   
@@ -226,7 +233,7 @@ app.put('/api/products/:id', authenticateToken, async (req: any, res: any) => {
 });
 
 // --- Supplier Routes ---
-app.get('/api/suppliers', authenticateToken, async (req: any, res: any) => {
+apiRouter.get('/suppliers', authenticateToken, async (req: any, res: any) => {
   const { data: suppliers, error } = await supabase.from('suppliers').select('*');
   if (error) return res.status(500).json({ error: error.message });
 
@@ -251,7 +258,7 @@ app.get('/api/suppliers', authenticateToken, async (req: any, res: any) => {
   res.json(formatted);
 });
 
-app.post('/api/suppliers', authenticateToken, async (req: any, res: any) => {
+apiRouter.post('/suppliers', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'admin') return res.sendStatus(403);
   const { name, company, phone, email, address, accessUsername, password } = req.body;
   
@@ -287,7 +294,7 @@ app.post('/api/suppliers', authenticateToken, async (req: any, res: any) => {
   res.json(supplier);
 });
 
-app.put('/api/suppliers/:id', authenticateToken, async (req: any, res: any) => {
+apiRouter.put('/suppliers/:id', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'admin') return res.sendStatus(403);
   const { name, company, phone, email, address } = req.body;
   const supplierId = req.params.id;
@@ -310,7 +317,7 @@ app.put('/api/suppliers/:id', authenticateToken, async (req: any, res: any) => {
   res.json(data);
 });
 
-app.delete('/api/suppliers/:id', authenticateToken, async (req: any, res: any) => {
+apiRouter.delete('/suppliers/:id', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'admin') return res.sendStatus(403);
   const supplierId = req.params.id;
   
@@ -323,7 +330,7 @@ app.delete('/api/suppliers/:id', authenticateToken, async (req: any, res: any) =
   res.json({ success: true });
 });
 
-app.post('/api/suppliers/:id/products', authenticateToken, async (req: any, res: any) => {
+apiRouter.post('/suppliers/:id/products', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'admin') return res.sendStatus(403);
   const { productIds } = req.body; // Array of product IDs
   const supplierId = req.params.id;
@@ -342,7 +349,7 @@ app.post('/api/suppliers/:id/products', authenticateToken, async (req: any, res:
 });
 
 // --- Order Routes ---
-app.get('/api/orders', authenticateToken, async (req: any, res: any) => {
+apiRouter.get('/orders', authenticateToken, async (req: any, res: any) => {
   let query = supabase
     .from('orders')
     .select(`
@@ -376,7 +383,7 @@ app.get('/api/orders', authenticateToken, async (req: any, res: any) => {
   res.json(formatted);
 });
 
-app.post('/api/orders', authenticateToken, async (req: any, res: any) => {
+apiRouter.post('/orders', authenticateToken, async (req: any, res: any) => {
   if (req.user.role === 'proveedor') return res.sendStatus(403);
   const { supplier_id, products } = req.body; // products: [{ product_id, quantity }]
   
@@ -412,7 +419,7 @@ app.post('/api/orders', authenticateToken, async (req: any, res: any) => {
   res.json({ id: order.id, status: 'pendiente' });
 });
 
-app.put('/api/orders/:id/status', authenticateToken, async (req: any, res: any) => {
+apiRouter.put('/orders/:id/status', authenticateToken, async (req: any, res: any) => {
   const { status } = req.body;
   const orderId = req.params.id;
   
@@ -481,7 +488,7 @@ app.put('/api/orders/:id/status', authenticateToken, async (req: any, res: any) 
 });
 
 // --- Movement Routes ---
-app.get('/api/movements', authenticateToken, async (req: any, res: any) => {
+apiRouter.get('/movements', authenticateToken, async (req: any, res: any) => {
   const { data: movements, error } = await supabase
     .from('movements')
     .select('*, products(name)')
@@ -497,7 +504,7 @@ app.get('/api/movements', authenticateToken, async (req: any, res: any) => {
   res.json(formatted);
 });
 
-app.post('/api/movements', authenticateToken, async (req: any, res: any) => {
+apiRouter.post('/movements', authenticateToken, async (req: any, res: any) => {
   if (req.user.role !== 'bodega' && req.user.role !== 'admin') return res.sendStatus(403);
   const { product_id, type, quantity, reason } = req.body;
   
@@ -518,7 +525,7 @@ app.post('/api/movements', authenticateToken, async (req: any, res: any) => {
 });
 
 // --- AI Prediction ---
-app.get('/api/predict', authenticateToken, async (req: any, res: any) => {
+apiRouter.get('/predict', authenticateToken, async (req: any, res: any) => {
   try {
     const { data: products } = await supabase.from('products').select('*');
     if (!products) return res.status(500).json({ error: 'No products found' });
@@ -556,7 +563,7 @@ app.get('/api/predict', authenticateToken, async (req: any, res: any) => {
   }
 });
 
-app.post('/api/predict', authenticateToken, async (req: any, res: any) => {
+apiRouter.post('/predict', authenticateToken, async (req: any, res: any) => {
   const { productId } = req.body;
   const { data: product } = await supabase.from('products').select('*').eq('id', productId).single();
   const { data: movements } = await supabase
@@ -611,6 +618,10 @@ app.post('/api/predict', authenticateToken, async (req: any, res: any) => {
     });
   }
 });
+
+// Mount the router at both paths
+app.use('/api', apiRouter);
+app.use('/.netlify/functions/api', apiRouter);
 
 // Start Server (Only if not running as a Netlify function)
 if (!process.env.NETLIFY) {
