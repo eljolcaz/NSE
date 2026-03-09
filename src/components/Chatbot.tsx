@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
-import { GoogleGenAI } from '@google/genai';
 
 interface Message {
   role: 'user' | 'model';

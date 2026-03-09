@@ -237,23 +237,23 @@ export default function Layout() {
           collapsed ? "w-20" : "w-64"
         )}
       >
-        <div className="h-16 flex items-center px-4 border-b border-slate-200 dark:border-slate-800 justify-between">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0">
-              <span className="text-white font-bold text-lg">G</span>
-            </div>
-            {!collapsed && (
+        <div className={cn("h-16 flex items-center border-b border-slate-200 dark:border-slate-800", collapsed ? "justify-center px-0" : "justify-between px-4")}>
+          {!collapsed && (
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0">
+                <span className="text-white font-bold text-lg">G</span>
+              </div>
               <div className="flex flex-col">
                 <span className="font-bold text-slate-900 dark:text-white leading-none">GastroLogix</span>
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">AI Enterprise</span>
               </div>
-            )}
-          </div>
+            </div>
+          )}
           <button 
             onClick={() => setCollapsed(!collapsed)}
             className="hidden md:flex p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
           >
-            {collapsed ? <Menu className="w-4 h-4" /> : <X className="w-4 h-4" />}
+            {collapsed ? <Menu className="w-5 h-5" /> : <X className="w-5 h-5" />}
           </button>
         </div>
 
@@ -319,12 +319,13 @@ export default function Layout() {
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
+              className="md:hidden p-2 -ml-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
             >
-              <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0">
-                <span className="text-white font-bold text-lg">G</span>
-              </div>
+              <Menu className="w-6 h-6" />
             </button>
+            <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0 md:hidden">
+              <span className="text-white font-bold text-lg">G</span>
+            </div>
             <h1 className="text-lg font-bold text-slate-900 dark:text-white hidden sm:block">
               {getPageTitle()}
             </h1>

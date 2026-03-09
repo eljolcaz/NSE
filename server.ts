@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -552,7 +553,7 @@ apiRouter.get('/predict', authenticateToken, async (req: any, res: any) => {
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
     
@@ -591,7 +592,7 @@ apiRouter.post('/predict', authenticateToken, async (req: any, res: any) => {
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
     

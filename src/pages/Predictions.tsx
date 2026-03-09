@@ -3,6 +3,7 @@ import { BrainCircuit, Sparkles, RefreshCw, AlertTriangle, TrendingUp } from 'lu
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import ReactMarkdown from 'react-markdown';
+import { toast } from 'sonner';
 
 export default function Predictions() {
   const { token } = useAuth();
@@ -15,10 +16,18 @@ export default function Predictions() {
     setLoading(true);
     try {
       const data = await api.getPrediction(token);
-      setPrediction(data.prediction);
-      setLastUpdated(new Date());
+      if (data.error) {
+        toast.error('Error al generar el análisis: ' + data.error);
+        setPrediction(null);
+      } else {
+        setPrediction(data.prediction);
+        setLastUpdated(new Date());
+        toast.success('Análisis actualizado correctamente');
+      }
     } catch (error) {
       console.error("Failed to generate prediction", error);
+      toast.error('Error de conexión al generar el análisis');
+      setPrediction(null);
     } finally {
       setLoading(false);
     }
