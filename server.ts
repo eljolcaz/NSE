@@ -612,15 +612,23 @@ app.post('/api/predict', authenticateToken, async (req: any, res: any) => {
   }
 });
 
-// Start Server (Only in development or if not running as a function)
-if (process.env.NODE_ENV !== 'production' && !process.env.NETLIFY) {
+// Start Server (Only if not running as a Netlify function)
+if (!process.env.NETLIFY) {
   async function startServer() {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
+    if (process.env.NODE_ENV !== 'production') {
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } else {
+      const path = await import('path');
+      app.use(express.static(path.resolve(process.cwd(), 'dist')));
+      app.get('*', (req, res) => {
+        res.sendFile(path.resolve(process.cwd(), 'dist', 'index.html'));
+      });
+    }
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Server running on http://localhost:${PORT}`);
